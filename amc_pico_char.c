@@ -26,6 +26,7 @@
 static
 int char_open(struct inode *inode, struct file *file)
 {
+    int ret;
     struct file_data *fdata;
 	struct board_data *board = container_of(inode->i_cdev, struct board_data, cdev);
 
@@ -34,16 +35,35 @@ int char_open(struct inode *inode, struct file *file)
 	if (!try_module_get(THIS_MODULE))
 		return -ENODEV;
 
+    if (!kobject_get(&board->cdev.kobj)) {
+        ret = -ENODEV;
+        goto unmod;
+    }
+
+    if (!kobject_get(&board->kobj)) {
+        ret = -ENODEV;
+        goto uncdev;
+    }
+
     fdata = kzalloc(sizeof(*fdata), GFP_KERNEL);
     if(!fdata) {
-        module_put(THIS_MODULE);
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto unobj;
     }
     fdata->board = board;
 
     file->private_data = fdata;
 
 	return 0;
+//bfree:
+//    kfree(fdata);
+unobj:
+    kobject_put(&board->kobj);
+uncdev:
+    kobject_put(&board->cdev.kobj);
+unmod:
+    module_put(THIS_MODULE);
+    return ret;
 }
 
 static
@@ -55,7 +75,8 @@ int char_release(struct inode *inode, struct file *file)
 	dev_dbg(&board->pci_dev->dev, "char_release()\n");
 
     kfree(fdata);
-
+    kobject_put(&board->kobj);
+    kobject_put(&board->cdev.kobj);
 	module_put(THIS_MODULE);
 	return 0;
 }
