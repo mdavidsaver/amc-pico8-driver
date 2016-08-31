@@ -43,12 +43,13 @@ echo "module amc_pico +p" > /sys/kernel/debug/dynamic_debug/control
 
 See https://www.kernel.org/doc/Documentation/dynamic-debug-howto.txt
 
-ABI
-===
+ABI (Primary char. dev)
+=======================
 
-One chardev is created for each pico8 card.
-By default this is named with the PCI identifier as
-for example ```/dev/amc_pico_0000:03:00.0```.
+Several chardevs are created for each pico8 card.
+By default all ared named with the PCI identifier.
+For example the primary is ```/dev/amc_pico_0000:03:00.0```.
+Others have the same name as the primary with a suffix.
 
 read()
 ------
@@ -123,6 +124,19 @@ case USER_SITE_FRIB: /* FRIB customized FW */ break;
 
 This provides a means for user applications
 to detect and make use of custom firmware features.
+
+ABI (DDR char. dev)
+=======================
+
+A char. dev ```/dev/amc_pico_0000:03:00.0_ddr```
+is created for each pico8 card.
+
+Reads and writes to this device access the DDR memory on the pico8 card.
+Individual reads and writes must be aligned to 4 bytes (offset and count).
+The device is seek()able.
+
+Note that a block device is not used to avoid potential complications of
+OS level caching.
 
 ABI History
 ===========

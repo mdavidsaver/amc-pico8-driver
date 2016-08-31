@@ -73,14 +73,16 @@ loff_t char_ddr_llseek(struct file *filp, loff_t pos, int whence)
 static
 ssize_t char_ddr_write(struct file *filp, const char __user *buf, size_t count, loff_t *pos)
 {
+    ssize_t ret=0;
     struct board_data *board = (struct board_data *)filp->private_data;
     size_t page_size = resource_size(&board->pci_dev->resource[2]),
-           limit = page_size*DDR_SELECT_COUNT;
-    unsigned page;
-    uint32_t poffset, plimit;
+           limit = page_size*DDR_SELECT_COUNT,
+           remaining;
     loff_t npos = 0;
 
     if(pos) npos = *pos;
+
+    dev_dbg(&board->pci_dev->dev, "DDR write(%lu, %zu) (page_size=%zu)\n", (unsigned long)npos, count, page_size);
 
     /* round down to word boundary */
     count &= ~3;
@@ -89,28 +91,56 @@ ssize_t char_ddr_write(struct file *filp, const char __user *buf, size_t count, 
     if(npos>limit) npos = limit;
 
     if(count>limit-npos) count = limit-npos;
+
     if(!count) return count;
 
-    page = npos/page_size;
-    poffset = npos%page_size;
-    plimit = poffset + count;
+    remaining = count;
 
-    WARN(page>=DDR_SELECT_COUNT, "Page select validation error %u\n", page);
-    if(page>=DDR_SELECT_COUNT) return -EINVAL;
+    if(mutex_lock_interruptible(&board->ddr_lock))
+        return -EINTR;
 
-    /* page select */
-    iowrite32(page, board->bar0+DDR_SELECT);
+    while(ret==0 && remaining>0) {
 
-    for(; poffset<plimit; poffset+=4, buf+=4) {
-        uint32_t val;
-        int ret = get_user(val, (uint32_t*)buf);
-        if(ret) return ret;
-        iowrite32(val, board->bar2+poffset);
+        unsigned page = npos/page_size;
+        uint32_t poffset = npos%page_size,
+                 plimit = poffset + remaining;
+
+        if(unlikely(page>=DDR_SELECT_COUNT)) {
+            ret = -EINVAL;
+            WARN(1, "Page selection logic error %lu %zu\n", (unsigned long)npos, page_size);
+            break;
+        }
+
+        if(plimit>page_size)
+            plimit = page_size;
+
+        remaining -= plimit-poffset;
+        npos      += plimit-poffset;
+
+        /* page select */
+        iowrite32(page, board->bar0+DDR_SELECT);
+
+        for(; !ret && poffset<plimit; poffset+=4, buf+=4) {
+            uint32_t val;
+            ret = get_user(val, (uint32_t*)buf);
+            if(!ret)
+                iowrite32(val, board->bar2+poffset);
+        }
     }
 
-    if(*pos) *pos = poffset;
+    mutex_unlock(&board->ddr_lock);
 
-    return count;
+    if(ret) {
+        dev_dbg(&board->pci_dev->dev, "  ERR %zd\n", ret);
+        return ret;
+
+    } else {
+        count -= remaining;
+        if(pos) *pos = npos;
+
+        dev_dbg(&board->pci_dev->dev, "  POS %lu CNT %zd\n", (unsigned long)npos, count);
+        return count;
+    }
 }
 
 static
@@ -121,15 +151,16 @@ ssize_t char_ddr_read(
         loff_t *pos
         )
 {
-    ssize_t ret;
+    ssize_t ret=0;
     struct board_data *board = (struct board_data *)filp->private_data;
     size_t page_size = resource_size(&board->pci_dev->resource[2]),
-           limit = page_size*DDR_SELECT_COUNT;
-    unsigned page;
-    uint32_t poffset, plimit;
+           limit = page_size*DDR_SELECT_COUNT,
+            remaining;
     loff_t npos = 0;
 
     if(pos) npos = *pos;
+
+    dev_dbg(&board->pci_dev->dev, "DDR read(%lu, %zu) (page_size=%zu)\n", (unsigned long)npos, count, page_size);
 
     /* round down to word boundary */
     count &= ~3u;
@@ -138,29 +169,53 @@ ssize_t char_ddr_read(
     if(npos>limit) npos = limit;
 
     if(count>limit-npos) count = limit-npos;
+
     if(!count) return count;
+    remaining = count;
 
-    page = npos/page_size;
-    poffset = npos%page_size;
-    plimit = poffset + count;
+    if(mutex_lock_interruptible(&board->ddr_lock))
+        return -EINTR;
 
-    WARN(page>=DDR_SELECT_COUNT, "Page select validation error %u\n", page);
-    if(page>=DDR_SELECT_COUNT) return -EINVAL;
+    while(ret==0 && remaining>0) {
 
-    /* page select */
-    iowrite32(page, board->bar0+DDR_SELECT);
+        unsigned page = npos/page_size;
+        uint32_t poffset = npos%page_size,
+                 plimit = poffset + remaining;
 
-    for(ret=0; !ret && poffset<plimit; poffset+=4, buf+=4) {
-        uint32_t val = ioread32(board->bar2+poffset);
-        ret = put_user(val, (uint32_t*)buf);
+        if(unlikely(page>=DDR_SELECT_COUNT)) {
+            ret = -EINVAL;
+            WARN(1, "Page selection logic error %lu %zu\n", (unsigned long)npos, page_size);
+            break;
+        }
+
+        if(plimit>page_size)
+            plimit = page_size;
+
+        remaining -= plimit-poffset;
+        npos      += plimit-poffset;
+
+        /* page select */
+        iowrite32(page, board->bar0+DDR_SELECT);
+
+        for(; !ret && poffset<plimit; poffset+=4, buf+=4) {
+            uint32_t val = ioread32(board->bar2+poffset);
+            ret = put_user(val, (uint32_t*)buf);
+        }
     }
 
-    if(!ret) {
-        ret = count;
-        if(*pos) *pos = poffset;
-    }
+    mutex_unlock(&board->ddr_lock);
 
-    return count;
+    if(ret) {
+        dev_dbg(&board->pci_dev->dev, "  ERR %zd\n", ret);
+        return ret;
+
+    } else {
+        count -= remaining;
+        if(pos) *pos = npos;
+
+        dev_dbg(&board->pci_dev->dev, "  POS %lu CNT %zd\n", (unsigned long)npos, count);
+        return count;
+    }
 }
 
 const struct file_operations amc_ddr_fops = {
