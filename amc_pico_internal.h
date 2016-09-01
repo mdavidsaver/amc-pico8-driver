@@ -111,9 +111,10 @@ struct board_data {
     cycles_t longest_isr;
 
     /* prevent concurrent access to onboard DDR ram.
-     * Principly protecting page selection register.
+     * protecting page selection register and ddr_buffer
      */
     struct mutex ddr_lock;
+    uint32_t ddr_buffer[PAGE_SIZE/4];
 };
 
 #endif /* AMC_PICO_INTERNAL_H_ */

@@ -154,9 +154,15 @@ ssize_t char_ddr_read(
     ssize_t ret=0;
     struct board_data *board = (struct board_data *)filp->private_data;
     size_t page_size = resource_size(&board->pci_dev->resource[2]),
-           limit = page_size*DDR_SELECT_COUNT,
-            remaining;
+           limit = page_size*DDR_SELECT_COUNT;
     loff_t npos = 0;
+    unsigned sel_page;
+
+    if(page_size%PAGE_SIZE) {
+        /* this is probably implied by BAR size/alignment restrictions */
+        dev_dbg(&board->pci_dev->dev, "Device page size is not a multiple of system page size %zu %lu\n", page_size, PAGE_SIZE);
+        return -EIO;
+    }
 
     if(pos) npos = *pos;
 
@@ -171,36 +177,44 @@ ssize_t char_ddr_read(
     if(count>limit-npos) count = limit-npos;
 
     if(!count) return count;
-    remaining = count;
+
+    limit = npos + count;
+    /* Need to read and store [npos, limit) */
+
+    count = 0;
 
     if(mutex_lock_interruptible(&board->ddr_lock))
         return -EINTR;
 
-    while(ret==0 && remaining>0) {
+    memset(&board->ddr_buffer, 0, sizeof(board->ddr_buffer));
 
-        unsigned page = npos/page_size;
-        uint32_t poffset = npos%page_size,
-                 plimit = poffset + remaining;
+    /* read currently selected device page */
+    sel_page = ioread32(board->bar0+DDR_SELECT)&DDR_SELECT_MASK;
 
-        if(unlikely(page>=DDR_SELECT_COUNT)) {
-            ret = -EINVAL;
-            WARN(1, "Page selection logic error %lu %zu\n", (unsigned long)npos, page_size);
-            break;
+    while(!ret && npos<limit) {
+        /* page and offset in device */
+        unsigned devpage = npos/page_size, i;
+        uint32_t devoffset = npos%page_size;
+        /* page and offset in system pages (eg. 4K) */
+        uint32_t syspage = devoffset&PAGE_MASK,
+                 sysoffset = devoffset&~PAGE_MASK;
+
+        /* change device page selection if necessary */
+        if(devpage!=sel_page) {
+            sel_page = devpage;
+            iowrite32(sel_page, board->bar0+DDR_SELECT);
         }
 
-        if(plimit>page_size)
-            plimit = page_size;
-
-        remaining -= plimit-poffset;
-        npos      += plimit-poffset;
-
-        /* page select */
-        iowrite32(page, board->bar0+DDR_SELECT);
-
-        for(; !ret && poffset<plimit; poffset+=4, buf+=4) {
-            uint32_t val = ioread32(board->bar2+poffset);
-            ret = put_user(val, (uint32_t*)buf);
+        for(i=sysoffset; i<PAGE_SIZE; i+=4) {
+            board->ddr_buffer[i/4u] = ioread32(board->bar2+syspage+i);
         }
+
+        ret = copy_to_user(buf,
+                           &board->ddr_buffer[sysoffset],
+                           PAGE_SIZE-sysoffset);
+
+        npos  += PAGE_SIZE-sysoffset;
+        count += PAGE_SIZE-sysoffset;
     }
 
     mutex_unlock(&board->ddr_lock);
@@ -210,7 +224,6 @@ ssize_t char_ddr_read(
         return ret;
 
     } else {
-        count -= remaining;
         if(pos) *pos = npos;
 
         dev_dbg(&board->pci_dev->dev, "  POS %lu CNT %zd\n", (unsigned long)npos, count);
