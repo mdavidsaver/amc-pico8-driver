@@ -8,6 +8,7 @@ obj-m	:= amc_pico.o
 amc_pico-objs := amc_pico_main.o
 amc_pico-objs += amc_pico_bist.o
 amc_pico-objs += amc_pico_char.o
+amc_pico-objs += amc_pico_ddr.o
 amc_pico-objs += amc_pico_dma.o
 
 # This is a no-op when dynamic debugging is enabled.  See README

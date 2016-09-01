@@ -72,8 +72,8 @@ struct board_data {
 	/** kernel virtual address of the mapped BAR memory and IO regions of
 	 *  the End Point. Used by map_bars()/unmap_bars().
 	 */
-	void * __iomem bar0;
-	void * __iomem bar2;
+    char * __iomem bar0;
+    char * __iomem bar2;
 
     enum dmac_irqmode_t irqmode;
 
@@ -82,9 +82,11 @@ struct board_data {
 
 	/** character device number */
 	dev_t cdevno;
+    dev_t cdevno_ddr;
 
-	/** character device */
+    /** character devices */
 	struct cdev cdev;
+    struct cdev cdev_ddr;
 
 	/** pointer to DMA buffer for mSGDMA on FPGA */
 	void *kernel_mem_buf[DMA_BUF_COUNT];

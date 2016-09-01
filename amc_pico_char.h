@@ -41,6 +41,7 @@
 #include "amc_pico_dma.h"
 
 extern const struct file_operations amc_pico_fops;
+extern const struct file_operations amc_ddr_fops;
 
 struct file_data {
     struct board_data *board;

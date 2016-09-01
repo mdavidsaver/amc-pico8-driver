@@ -100,6 +100,11 @@
 #define INTR_USER 0x2
 #define INTR_MASK (INTR_DMA_DONE|INTR_USER)
 
+
+#define DDR_SELECT (0x3c004)
+#define DDR_SELECT_MASK (0xf)
+#define DDR_SELECT_COUNT (1+(DDR_SELECT_MASK))
+
 /** Registers specific to FRIB local firmware.
  */
 #ifdef CONFIG_AMC_PICO_FRIB

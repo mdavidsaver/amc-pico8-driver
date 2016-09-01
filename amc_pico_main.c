@@ -512,28 +512,45 @@ int pico_cdev_setup(struct pci_dev *dev, struct board_data *board)
     //ret = pico_attrs_setup(dev, board);
     ERR(ret, done, "Failed to add sysfs attrs\n");
 
-    ret = alloc_chrdev_region(&board->cdevno, 0, 1, MOD_NAME);
+    ret = alloc_chrdev_region(&board->cdevno, 0, 2, MOD_NAME);
     ERR(ret, unsysfs, "Failed to allocate chrdev number\n");
+
+    board->cdevno_ddr = MKDEV(MAJOR(board->cdevno), MINOR(board->cdevno)+1);
 
     cdev_init(&board->cdev, &amc_pico_fops);
     board->cdev.owner = THIS_MODULE;
 
+    cdev_init(&board->cdev_ddr, &amc_ddr_fops);
+    board->cdev_ddr.owner = THIS_MODULE;
+
     ret = cdev_add(&board->cdev, board->cdevno, 1);
     ERR(ret, cfree, "Failed to add chrdev\n")
+
+    ret = cdev_add(&board->cdev_ddr, board->cdevno_ddr, 1);
+    ERR(ret, cdel, "Failed to add chrdev\n")
 
     cdev = device_create(damc_fmc25_class, &dev->dev, board->cdevno,
                          NULL, MOD_NAME "_%s", pci_name(dev));
     ret = -ENOMEM;
-    ERR(IS_ERR(cdev), cdel, "Failed to allocate device\n");
+    ERR(IS_ERR(cdev), cdelddr, "Failed to allocate device\n");
+
+    cdev = device_create(damc_fmc25_class, &dev->dev, board->cdevno_ddr,
+                         NULL, MOD_NAME "_%s_ddr", pci_name(dev));
+    ret = -ENOMEM;
+    ERR(IS_ERR(cdev), devdtor, "Failed to allocate ddr device\n");
 
     return 0;
-//devdtor:
-//    device_destroy(damc_fmc25_class, board->cdevno);
+//devdtorddr:
+//    device_destroy(damc_fmc25_class, board->cdevno_ddr);
+devdtor:
+    device_destroy(damc_fmc25_class, board->cdevno);
+cdelddr:
+    cdev_del(&board->cdev_ddr);
 cdel:
     cdev_del(&board->cdev);
     pico_wait_for_op(board);
 cfree:
-    unregister_chrdev_region(board->cdevno, 1);
+    unregister_chrdev_region(board->cdevno, 2);
 unsysfs:
     sysfs_remove_groups(&dev->dev.kobj, pico_groups);
 done:
@@ -544,10 +561,12 @@ done:
 static
 void pico_cdev_cleanup(struct pci_dev *dev, struct board_data *board)
 {
+    device_destroy(damc_fmc25_class, board->cdevno_ddr);
     device_destroy(damc_fmc25_class, board->cdevno);
+    cdev_del(&board->cdev_ddr);
     cdev_del(&board->cdev);
     pico_wait_for_op(board);
-    unregister_chrdev_region(board->cdevno, 1);
+    unregister_chrdev_region(board->cdevno, 2);
     sysfs_remove_groups(&dev->dev.kobj, pico_groups);
 }
 
