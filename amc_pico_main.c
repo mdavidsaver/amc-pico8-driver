@@ -614,14 +614,22 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     ret = pico_pci_setup(dev, board);
     if(!ret) {
-        dev_info(&dev->dev, "FPGA HW version = %08x\n",
-            ioread32(board->bar0 + PICO_ADDR + FPGA_VER_OFFSET));
-        dev_info(&dev->dev, "FPGA HW timestamp = %d\n",
+        uint32_t fwver = ioread32(board->bar0 + PICO_ADDR + FPGA_VER_OFFSET);
+        dev_info(&dev->dev, "FPGA FW version = %08x\n",
+            fwver);
+        dev_info(&dev->dev, "FPGA FW timestamp = %d\n",
             ioread32(board->bar0 + PICO_ADDR + FPGA_TS_OFFSET));
 
-        dma_reset(board);
+        if(fwver==0xffffffff) {
+            dev_err(&dev->dev, "Invalid FW version %08x, assume PCIe communication error.", fwver);
+            ret = -EIO;
 
-        ret = pico_cdev_setup(dev, board);
+        } else {
+
+            dma_reset(board);
+            ret = pico_cdev_setup(dev, board);
+        }
+
         if(ret) {
             pico_pci_cleanup(dev, board);
         }
