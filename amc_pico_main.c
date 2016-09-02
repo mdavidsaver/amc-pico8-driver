@@ -106,7 +106,7 @@ static
 int version[3] = {1, 0, 7};
 
 static
-struct class *damc_fmc25_class;
+struct class *amc_pico8_class;
 
 /* allow DMA buffer size to be selected at load time.
  * May be reduced for testing.
@@ -531,21 +531,21 @@ int pico_cdev_setup(struct pci_dev *dev, struct board_data *board)
     ret = cdev_add(&board->cdev_ddr, board->cdevno_ddr, 1);
     ERR(ret, cdel, "Failed to add chrdev\n")
 
-    cdev = device_create(damc_fmc25_class, &dev->dev, board->cdevno,
+    cdev = device_create(amc_pico8_class, &dev->dev, board->cdevno,
                          NULL, MOD_NAME "_%s", pci_name(dev));
     ret = -ENOMEM;
     ERR(IS_ERR(cdev), cdelddr, "Failed to allocate device\n");
 
-    cdev = device_create(damc_fmc25_class, &dev->dev, board->cdevno_ddr,
+    cdev = device_create(amc_pico8_class, &dev->dev, board->cdevno_ddr,
                          NULL, MOD_NAME "_%s_ddr", pci_name(dev));
     ret = -ENOMEM;
     ERR(IS_ERR(cdev), devdtor, "Failed to allocate ddr device\n");
 
     return 0;
 //devdtorddr:
-//    device_destroy(damc_fmc25_class, board->cdevno_ddr);
+//    device_destroy(amc_pico8_class, board->cdevno_ddr);
 devdtor:
-    device_destroy(damc_fmc25_class, board->cdevno);
+    device_destroy(amc_pico8_class, board->cdevno);
 cdelddr:
     cdev_del(&board->cdev_ddr);
 cdel:
@@ -563,8 +563,8 @@ done:
 static
 void pico_cdev_cleanup(struct pci_dev *dev, struct board_data *board)
 {
-    device_destroy(damc_fmc25_class, board->cdevno_ddr);
-    device_destroy(damc_fmc25_class, board->cdevno);
+    device_destroy(amc_pico8_class, board->cdevno_ddr);
+    device_destroy(amc_pico8_class, board->cdevno);
     cdev_del(&board->cdev_ddr);
     cdev_del(&board->cdev);
     pico_wait_for_op(board);
@@ -749,12 +749,12 @@ static int __init damc_fmc25_pcie_init(void)
                (unsigned long long)cycles, (unsigned long long)nsec);
     }
 
-	damc_fmc25_class = class_create(THIS_MODULE, MOD_NAME);
-	if(!damc_fmc25_class) return -ENOMEM;
+	amc_pico8_class = class_create(THIS_MODULE, MOD_NAME);
+	if(!amc_pico8_class) return -ENOMEM;
 
 	rc = pci_register_driver(&pci_driver);
 	if(rc)
-		class_destroy(damc_fmc25_class);
+		class_destroy(amc_pico8_class);
 	return rc;
 }
 
@@ -765,7 +765,7 @@ static void __exit damc_fmc25_pcie_exit(void)
 {
 	printk(KERN_DEBUG MOD_NAME " exit()\n");
 	pci_unregister_driver(&pci_driver);
-	class_destroy(damc_fmc25_class);
+	class_destroy(amc_pico8_class);
 }
 
 

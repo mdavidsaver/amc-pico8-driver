@@ -257,13 +257,15 @@ long char_ioctl(
     case SET_RANGE:
         ret = 0;
 		break;
-    case SET_FSAMP:
-        if ((uval.u32 == 0) || uval.u32 > PICO_CONV_MAX){
-            return -EINVAL;
-        } else {
-            ret = 0;
-        }
+    case SET_FSAMP:	{
+		uint32_t scaler = PICO_CLK_FREQ / uval.u32 - 1;
+		if ((uval.u32 > PICO_ADC_MAX_FREQ) || (scaler > (PICO_CONV_MAX-1))){
+			return -EINVAL;
+		} else {
+			ret = 0;
+		}
 		break;
+	}
     case SET_TRG:
     case SET_RING_BUF:
 	case SET_GATE_MUX:
@@ -280,6 +282,8 @@ long char_ioctl(
          *  1 - Added GET_VERSION and ABORT_READ
          *  2 - Added GET_SITE_ID, GET_SITE_VERSION, SET_SITE_MODE.
          *      Changed all others.
+         *  3 - Changed GET_FSAMP and SET_FSAMP to use frequency as
+         *      a parameter
          */
         return put_user(GET_VERSION_CURRENT, (uint32_t*)arg);
     case GET_SITE_ID:
@@ -332,14 +336,18 @@ long char_ioctl(
         uval.u8 = ioread32(board->bar0) & 0xFF;
 		break;
 
-	case SET_FSAMP:
-        iowrite32(uval.u32, board->bar0 + PICO_CONV_GEN);
+	case SET_FSAMP: {
+        uint32_t scaler = PICO_CLK_FREQ / uval.u32 - 1;
+        iowrite32(scaler, board->bar0 + PICO_CONV_GEN);
         uval.u32 = ioread32(board->bar0 + PICO_CONV_GEN);
 		break;
+	}
 
-	case GET_FSAMP:
-        uval.u32 = ioread32(board->bar0 + PICO_CONV_GEN);
+	case GET_FSAMP: {
+        uint32_t scaler = ioread32(board->bar0 + PICO_CONV_GEN);
+        uval.u32 = PICO_CLK_FREQ / (scaler + 1);
 		break;
+	}
 
 	case GET_B_TRANS:
         uval.u32 = board->dma_bytes_trans;
@@ -403,6 +411,7 @@ long char_ioctl(
         wake_up_locked(&board->dma_queue);
 
 	default:
+        dev_dbg(&board->pci_dev->dev, "%s:   unknown ioctl\n", __PRETTY_FUNCTION__);
 		break;
 	}
 

@@ -60,6 +60,7 @@
 
 #define PICO_CLK_FREQ		(300000000)
 #define PICO_CONV_MAX		(2048)
+#define PICO_ADC_MAX_FREQ	(1000000)
 
 #define TRG_CTRL_CH_SHIFT	(8)
 

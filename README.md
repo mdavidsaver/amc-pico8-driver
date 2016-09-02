@@ -141,6 +141,12 @@ OS level caching.
 ABI History
 ===========
 
+Version 2 -> 3
+--------------
+* Changed GET_FSAMP/SET_FSAMP parameter to accept and return frequency as an
+  argument. The module in the FPGA which is generating the CONV signal for the
+  ADC is always running from 300 MHz clock.
+
 Version 1 -> 2
 --------------
 
