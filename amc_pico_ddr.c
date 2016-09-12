@@ -48,6 +48,21 @@ int char_ddr_release(struct inode *inode, struct file *filp)
 }
 
 static
+long char_ddr_ioctl(
+    struct file *filp,
+    unsigned int cmd,
+    unsigned long arg
+)
+{
+    switch(cmd) {
+    case GET_VERSION:
+        return put_user(GET_VERSION_CURRENT, (uint32_t*)arg);
+    default:
+        return -ENOTTY;
+    }
+}
+
+static
 loff_t char_ddr_llseek(struct file *filp, loff_t pos, int whence)
 {
     struct board_data *board = (struct board_data *)filp->private_data;
@@ -235,6 +250,7 @@ const struct file_operations amc_ddr_fops = {
     .owner		= THIS_MODULE,
     .open		= char_ddr_open,
     .release	= char_ddr_release,
+    .unlocked_ioctl = char_ddr_ioctl,
     .read		= char_ddr_read,
     .write      = char_ddr_write,
     .llseek     = char_ddr_llseek,
