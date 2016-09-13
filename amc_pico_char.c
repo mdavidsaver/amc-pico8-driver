@@ -505,31 +505,27 @@ static ssize_t frib_write_reg(struct board_data *board,
                              loff_t *pos)
 {
     ssize_t ret=0;
-    unsigned offset, end;
-    const uint32_t __user *ibuf = (const uint32_t __user *)buf;
+    unsigned offset = pos ? *pos : 0u, end;
+    uint32_t __user *ibuf = (uint32_t __user *)buf;
 
     if(count%4) return -EINVAL;
-    if(!pos || *pos<USER_ADDR) return -EINVAL;
+    if(count>0x100000) count=0x100000;
 
-    offset = *pos-USER_ADDR;
-
-    if(offset>=0x10000) return -EINVAL;
-
-    if(count>0x10000-offset)
-        count = 0x10000-offset;
-
+    /* request must be entirely in range */
+    if(offset<USER_ADDR || offset>=INTR_ADDR || offset+count>=INTR_ADDR) return -EINVAL;
     end = offset+count;
 
-    for(; offset<count; offset+=4, ibuf+=4)
+    for(; offset<end; offset+=4, ibuf++)
     {
         uint32_t val;
         ret = get_user(val, ibuf);
         if(unlikely(ret)) break;
-        iowrite32(val, board->bar0 + USER_ADDR + offset);
+        iowrite32(val, board->bar0 + offset);
     }
 
     if(!ret) ret=count;
     return ret;
+    /* *pos not updated */
 }
 
 static ssize_t frib_read_reg(struct board_data *board,
@@ -538,24 +534,19 @@ static ssize_t frib_read_reg(struct board_data *board,
                              loff_t *pos)
 {
     ssize_t ret=0;
-    unsigned offset, end;
+    unsigned offset = pos ? *pos : 0u, end;
     uint32_t __user *ibuf = (uint32_t __user *)buf;
 
     if(count%4) return -EINVAL;
-    if(!pos || *pos<USER_ADDR) return -EINVAL;
+    if(count>0x100000) count=0x100000;
 
-    offset = *pos-USER_ADDR;
-
-    if(offset>=0x10000) return 0;
-
-    if(count>0x10000-offset)
-        count = 0x10000-offset;
-
+    /* request must be entirely in range */
+    if(offset<USER_ADDR || offset>=INTR_ADDR || offset+count>INTR_ADDR) return -EINVAL;
     end = offset+count;
 
-    for(; ret && offset<count; offset+=4, ibuf+=4)
+    for(; !ret && offset<end; offset+=4, ibuf++)
     {
-        uint32_t val = ioread32(board->bar0 + USER_ADDR + offset);
+        uint32_t val = ioread32(board->bar0 + offset);
         ret = put_user(val, ibuf);
     }
 
