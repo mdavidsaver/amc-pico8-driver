@@ -113,7 +113,7 @@ ssize_t char_read(
     dev_dbg(&board->pci_dev->dev, "  read(), site_mode=%u count %zd\n", fdata->site_mode, count);
     if(0) {}
 #ifdef CONFIG_AMC_PICO_FRIB
-    else if(dmac_site==USER_SITE_FRIB) {
+    else if(board->site==USER_SITE_FRIB) {
         switch(fdata->site_mode) {
         case 0:  break;
         case 1:  return frib_read_reg(board, buf, count, pos);
@@ -287,11 +287,11 @@ long char_ioctl(
          */
         return put_user(GET_VERSION_CURRENT, (uint32_t*)arg);
     case GET_SITE_ID:
-        return put_user(dmac_site, (uint32_t*)arg);
+        return put_user(board->site, (uint32_t*)arg);
     case GET_SITE_VERSION:
     {
         uint32_t sver;
-        switch(dmac_site) {
+        switch(board->site) {
 #ifdef CONFIG_AMC_PICO_FRIB
         case USER_SITE_FRIB: sver = 0; break;
 #endif
@@ -302,7 +302,7 @@ long char_ioctl(
     case SET_SITE_MODE:
         if(0) {}
 #ifdef CONFIG_AMC_PICO_FRIB
-        else if(dmac_site==USER_SITE_FRIB) {
+        else if(board->site==USER_SITE_FRIB) {
             if(uval.u32>2) return -EINVAL;
         }
 #endif
@@ -443,7 +443,7 @@ ssize_t char_write(struct file *filp, const char __user *buf, size_t count, loff
     (void)board;
     if(0) {}
 #ifdef CONFIG_AMC_PICO_FRIB
-    else if(dmac_site==USER_SITE_FRIB) {
+    else if(board->site==USER_SITE_FRIB) {
         switch(fdata->site_mode) {
         case 1:  return frib_write_reg(board, buf, count, pos);
         default: return -EINVAL;
@@ -458,10 +458,10 @@ static
 loff_t char_llseek(struct file *filp, loff_t pos, int whence)
 {
     struct file_data *fdata = (struct file_data *)filp->private_data;
-    //struct board_data *board = fdata->board;
+    struct board_data *board = fdata->board;
     loff_t npos;
 
-    if(dmac_site!=USER_SITE_FRIB || fdata->site_mode==0)
+    if(board->site!=USER_SITE_FRIB || fdata->site_mode==0)
         return -EINVAL;
 #ifdef CONFIG_AMC_PICO_FRIB
 
@@ -510,6 +510,8 @@ static ssize_t frib_write_reg(struct board_data *board,
 
     if(count%4) return -EINVAL;
     if(count>0x100000) count=0x100000;
+
+    dev_info(&board->pci_dev->dev, "reg write %08x %zu", offset, count);
 
     /* request must be entirely in range */
     if(offset<USER_ADDR || offset>=INTR_ADDR || offset+count>=INTR_ADDR) return -EINVAL;

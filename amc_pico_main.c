@@ -127,19 +127,6 @@ unsigned long damc_dma_buf_len;
 uint dmac_irqmode = 2;
 module_param_named(irqmode, dmac_irqmode, uint, 0444);
 
-/* select source of site specific FW customization. */
-static
-char *dmac_site_name =
-#ifdef CONFIG_AMC_PICO_SITE_DEFAULT
-        CONFIG_AMC_PICO_SITE_DEFAULT
-#else
-        NULL
-#endif
-        ;
-uint32_t dmac_site;
-module_param_named(site, dmac_site_name, charp, 0444);
-
-
 /** List of devices this driver recognizes */
 static const struct pci_device_id ids[] = {
 	{ .vendor = PCI_VENDOR_ID_XILINX, .device = 0x0007,
@@ -251,7 +238,7 @@ irqreturn_t amc_isr(int irq, void *dev_id)
     if(active&INTR_USER) {
         if(0) {}
 #ifdef CONFIG_AMC_PICO_FRIB
-        else if(dmac_site==USER_SITE_FRIB) {
+        else if(board->site==USER_SITE_FRIB) {
             uint32_t status = ioread32(board->bar0+USER_STATUS);
             unsigned long flags;
             /* TODO: Note, being sloppy with locking here
@@ -602,6 +589,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     mutex_init(&board->ddr_lock);
 
+    board->site = USER_SITE_NONE;
 	board->pci_dev = dev;
     board->irqmode = dmac_irqmode;
     if (board->irqmode>2)
@@ -635,24 +623,33 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
         }
     }
     if(!ret) {
-        if(0) {}
 #ifdef CONFIG_AMC_PICO_FRIB
-        else if(dmac_site==USER_SITE_FRIB) {
-            init_waitqueue_head(&board->capture_queue);
+        {
+            /* FRIB firmware should read 0x0000bxxx
+             * Stock firmware should read 0xdeadbeef
+             */
+            uint32_t ffw = ioread32(board->bar0 + FRIB_VERSION);
+            if((ffw&0xfffff000)==0xb000) {
+                board->site = USER_SITE_FRIB;
 
-            board->capture_length = FRIB_CAP_LAST-FRIB_CAP_FIRST+4;
-            board->capture_buf = kmalloc(4*board->capture_length, GFP_KERNEL);
-            if(!board->capture_buf) {
-                board->capture_length = 0;
-                dev_err(&dev->dev, "FRIB capture buffer alloc fails.  Capture disabled.\n");
+                dev_info(&dev->dev, "Detected FRIB firmware %04x\n", (unsigned)ffw);
+
+                init_waitqueue_head(&board->capture_queue);
+
+                board->capture_length = FRIB_CAP_LAST-FRIB_CAP_FIRST+4;
+                board->capture_buf = kmalloc(4*board->capture_length, GFP_KERNEL);
+                if(!board->capture_buf) {
+                    board->capture_length = 0;
+                    dev_err(&dev->dev, "FRIB capture buffer alloc fails.  Capture disabled.\n");
+                }
+
+                mb();
+                iowrite32(INTR_DMA_DONE|INTR_USER, board->bar0+INTR_CLEAR);
+                iowrite32(INTR_DMA_DONE|INTR_USER, board->bar0+INTR_ENABLE);
             }
-
-            mb();
-            iowrite32(INTR_DMA_DONE|INTR_USER, board->bar0+INTR_CLEAR);
-            iowrite32(INTR_DMA_DONE|INTR_USER, board->bar0+INTR_ENABLE);
         }
 #endif
-        else {
+        if(board->site==USER_SITE_NONE) {
             mb();
             iowrite32(INTR_DMA_DONE, board->bar0+INTR_CLEAR);
             iowrite32(INTR_DMA_DONE, board->bar0+INTR_ENABLE);
@@ -719,17 +716,6 @@ static int __init damc_fmc25_pcie_init(void)
 {
 	int rc = 0;
 
-    if(!dmac_site_name || dmac_site_name[0]=='\0' || strcmp(dmac_site_name, "caen")==0) {
-        dmac_site = USER_SITE_NONE;
-#ifdef CONFIG_AMC_PICO_FRIB
-    } else if(strcmp(dmac_site_name, "frib")==0) {
-        dmac_site = USER_SITE_FRIB;
-#endif
-    } else {
-        printk(KERN_ERR "amc_pico has not site '%s'\n", dmac_site_name);
-        return -EINVAL;
-    }
-
 	damc_dma_buf_len = damc_req_dma_buf_len;
 
 	printk(KERN_DEBUG "===============================================\n");
@@ -740,11 +726,6 @@ static int __init damc_fmc25_pcie_init(void)
 #ifdef CONFIG_AMC_PICO_FRIB
     printk(KERN_DEBUG "Includes \"frib\" site FW support.\n");
 #endif
-#ifdef CONFIG_AMC_PICO_SITE_DEFAULT
-    printk(KERN_DEBUG "Defaults to " CONFIG_AMC_PICO_SITE_DEFAULT " site\n");
-#endif
-    if(dmac_site!=USER_SITE_NONE)
-        printk(KERN_DEBUG "Enabling site mods for \"%s\"\n", dmac_site_name);
     printk(KERN_DEBUG "===============================================\n");
 
 	print_all_ioctls();

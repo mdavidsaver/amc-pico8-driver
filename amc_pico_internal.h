@@ -46,8 +46,6 @@
 #define DMA_BUF_SIZE		damc_dma_buf_len
 extern unsigned long damc_dma_buf_len;
 
-extern uint32_t dmac_site;
-
 irqreturn_t amc_isr(int irq, void *dev_id);
 
 enum dmac_irqmode_t {
@@ -98,6 +96,8 @@ struct board_data {
     wait_queue_head_t dma_queue;
     unsigned dma_irq_flag;
     uint32_t dma_bytes_trans;
+
+    uint32_t site;
 
 #ifdef CONFIG_AMC_PICO_FRIB
     unsigned capture_ready;
