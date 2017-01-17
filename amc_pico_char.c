@@ -507,6 +507,7 @@ static ssize_t frib_write_reg(struct board_data *board,
     ssize_t ret=0;
     unsigned offset = pos ? *pos : 0u, end;
     uint32_t __user *ibuf = (uint32_t __user *)buf;
+    size_t bar0len = pci_resource_len(board->pci_dev, 0);
 
     if(count%4) return -EINVAL;
     if(count>0x100000) count=0x100000;
@@ -514,7 +515,7 @@ static ssize_t frib_write_reg(struct board_data *board,
     dev_info(&board->pci_dev->dev, "reg write %08x %zu", offset, count);
 
     /* request must be entirely in range */
-    if(offset<USER_ADDR || offset>=INTR_ADDR || offset+count>=INTR_ADDR) return -EINVAL;
+    if(offset>=bar0len || offset+count>bar0len) return -EINVAL;
     end = offset+count;
 
     for(; offset<end; offset+=4, ibuf++)
@@ -538,12 +539,13 @@ static ssize_t frib_read_reg(struct board_data *board,
     ssize_t ret=0;
     unsigned offset = pos ? *pos : 0u, end;
     uint32_t __user *ibuf = (uint32_t __user *)buf;
+    size_t bar0len = pci_resource_len(board->pci_dev, 0);
 
     if(count%4) return -EINVAL;
     if(count>0x100000) count=0x100000;
 
     /* request must be entirely in range */
-    if(offset<USER_ADDR || offset>=INTR_ADDR || offset+count>INTR_ADDR) return -EINVAL;
+    if(offset>=bar0len || offset+count>bar0len) return -EINVAL;
     end = offset+count;
 
     for(; !ret && offset<end; offset+=4, ibuf++)
