@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  configure)
+    udevadm control -R || echo "Warning: UDEV rules not reloaded"
+  ;;
+esac
+
+#DEBHELPER#
+
+exit 0

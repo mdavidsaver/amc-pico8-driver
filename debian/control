@@ -1,0 +1,28 @@
+Source: amc-pico8-driver
+Section: kernel
+Priority: optional
+Maintainer: Michael Davidsaver <mdavidsaver@gmail.com>
+Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.16.1~), dkms
+Standards-Version: 3.9.4
+Homepage: https://stash.nscl.msu.edu/projects/bcm/repos/bcm/caen-blm-software
+
+Package: pico8-dkms
+Architecture: all
+Depends: ${misc:Depends}, dkms
+Suggests: pico8-dev
+Description: DKMS source for CAEN ELS Pico8 picoammeter
+ CAEN ELS Pico8 as an 8 channel picoammeter digitizer
+ in microTCA (AMC) form factor.
+ .
+ This package contains the kernel module source in dkms layout
+
+Package: pico8-dev
+Architecture: all
+Depends: ${misc:Depends},
+Suggests: pico8-dkms
+Description: DKMS source for CAEN ELS Pico8 picoammeter
+ CAEN ELS Pico8 as an 8 channel picoammeter digitizer
+ in microTCA (AMC) form factor.
+ .
+ This package contains amc_pico.h which defines constants
+ for use with ioctl().

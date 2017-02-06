@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: amc-pico8-driver
+Source: https://stash.nscl.msu.edu/projects/bcm/repos/bcm/caen-blm-software
+
+Files: *
+Copyright: 2017, CAEN ELS d.o.o.
+           2017 Board of Trustees of Michigan State University
+License: GPL-2
+
+License: GPL-2
+ On Debian systems the full text of the GNU GPL v2 can be found
+ in the `/usr/share/common-licenses/GPL-2' file.

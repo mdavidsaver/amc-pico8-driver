@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+
+VERSION := $(shell dpkg-parsechangelog | sed -nr '/^Version:/s/Version: (.*:)?(.*)/\2/p')
+
+%:
+	dh $@ --with dkms
+
+# don't bother to test build
+override_dh_auto_build:
+	echo "#define AMC_PICO_VERSION "\""$(VERSION)"\" > amc_pico_version.h
+
+override_dh_auto_install:
+override_dh_auto_clean:
+	rm -f amc_pico_version.h test/picodefs.py
+
+override_dh_install:
+	dh_install amc*.h amc*.c Makefile usr/src/pico8-$(VERSION)/
+	cp config.example debian/pico8-dkms/usr/src/pico8-$(VERSION)/.config
+
+override_dh_dkms:
+	dh_dkms -V $(VERSION)
