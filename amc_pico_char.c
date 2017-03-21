@@ -512,7 +512,7 @@ static ssize_t frib_write_reg(struct board_data *board,
     if(count%4) return -EINVAL;
     if(count>0x100000) count=0x100000;
 
-    dev_info(&board->pci_dev->dev, "reg write %08x %zu", offset, count);
+    dev_dbg(&board->pci_dev->dev, "reg write %08x %zu", offset, count);
 
     /* request must be entirely in range */
     if(offset>=bar0len || offset+count>bar0len) return -EINVAL;
