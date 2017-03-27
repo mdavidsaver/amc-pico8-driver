@@ -244,6 +244,7 @@ irqreturn_t amc_isr(int irq, void *dev_id)
             /* TODO: Note, being sloppy with locking here
              *  Not sure how to guard this buffer since can't copy_to_user()
              *  with spinlock held.
+             *  maybe double buffer?
              */
             uint32_t *buf = board->capture_buf;
             uint32_t i;
@@ -253,6 +254,12 @@ irqreturn_t amc_isr(int irq, void *dev_id)
                     *buf++ = ioread32(board->bar0 + FRIB_CAP_FIRST + i);
                 }
 
+                if(status&(1<<18)) {
+#  ifdef dev_warn_ratelimited
+                    dev_warn_ratelimited(&board->pci_dev->dev, "ISR: Missed Previous Event\n");
+#  endif
+                }
+
                 /* clear waiting for ACK */
                 iowrite32(1<<16, board->bar0+USER_STATUS);
 
@@ -260,6 +267,10 @@ irqreturn_t amc_isr(int irq, void *dev_id)
                 board->capture_ready = 1;
                 wake_up_locked(&board->capture_queue);
                 spin_unlock_irqrestore(&board->capture_queue.lock, flags);
+            } else {
+#  ifdef dev_warn_ratelimited
+                dev_warn_ratelimited(&board->pci_dev->dev, "ISR: User IRQ w/o Event\n");
+#  endif
             }
         }
 #endif
