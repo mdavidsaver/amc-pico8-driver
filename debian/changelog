@@ -1,3 +1,9 @@
+amc-pico8-driver (1.0.7.frib2) unstable; urgency=medium
+
+  * Fix bug with DDR RAM read()
+
+ -- mdavidsaver <mdavidsaver@gmail.com>  Wed, 18 Oct 2017 17:19:20 -0500
+
 amc-pico8-driver (1.0.7.frib1) UNRELEASED; urgency=medium
 
   * Initial release. (Closes: #XXXXXX)
