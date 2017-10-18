@@ -171,7 +171,6 @@ ssize_t char_ddr_read(
     size_t page_size = resource_size(&board->pci_dev->resource[2]),
            limit = page_size*DDR_SELECT_COUNT;
     loff_t npos = 0;
-    unsigned sel_page;
 
     if(page_size%PAGE_SIZE) {
         /* this is probably implied by BAR size/alignment restrictions */
@@ -198,38 +197,28 @@ ssize_t char_ddr_read(
 
     count = 0;
 
+    /* prevent concurrent access to DDR_SELECT */
     if(mutex_lock_interruptible(&board->ddr_lock))
         return -EINTR;
 
-    memset(&board->ddr_buffer, 0, sizeof(board->ddr_buffer));
-
-    /* read currently selected device page */
-    sel_page = ioread32(board->bar0+DDR_SELECT)&DDR_SELECT_MASK;
-
-    while(!ret && npos<limit) {
+    while(npos<limit) {
         /* page and offset in device */
-        unsigned devpage = npos/page_size, i;
-        uint32_t devoffset = npos%page_size;
-        /* page and offset in system pages (eg. 4K) */
-        uint32_t syspage = devoffset&PAGE_MASK,
-                 sysoffset = devoffset&~PAGE_MASK;
+        unsigned page = npos/page_size, i,
+                 final_page = (limit-1)/page_size;
 
-        /* change device page selection if necessary */
-        if(devpage!=sel_page) {
-            sel_page = devpage;
-            iowrite32(sel_page, board->bar0+DDR_SELECT);
+        uint32_t devoffset = npos%page_size,
+                 devlimit = page==final_page ? (limit%page_size) : page_size;
+
+        iowrite32(page, board->bar0+DDR_SELECT);
+
+        for(i=devoffset; i<devlimit && !ret; i+=4, buf+=4) {
+            uint32_t val = ioread32(board->bar2+i);
+
+            ret = put_user(val, (uint32_t*)buf);
         }
 
-        for(i=sysoffset; i<PAGE_SIZE; i+=4) {
-            board->ddr_buffer[i/4u] = ioread32(board->bar2+syspage+i);
-        }
-
-        ret = copy_to_user(buf,
-                           &board->ddr_buffer[sysoffset],
-                           PAGE_SIZE-sysoffset);
-
-        npos  += PAGE_SIZE-sysoffset;
-        count += PAGE_SIZE-sysoffset;
+        npos  += devlimit-devoffset;
+        count += devlimit-devoffset;
     }
 
     mutex_unlock(&board->ddr_lock);

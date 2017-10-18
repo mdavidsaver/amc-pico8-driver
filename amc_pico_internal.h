@@ -114,7 +114,6 @@ struct board_data {
      * protecting page selection register and ddr_buffer
      */
     struct mutex ddr_lock;
-    uint32_t ddr_buffer[PAGE_SIZE/4];
 };
 
 #endif /* AMC_PICO_INTERNAL_H_ */

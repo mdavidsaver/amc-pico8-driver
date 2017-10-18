@@ -296,7 +296,7 @@ irqreturn_t amc_isr(int irq, void *dev_id)
 static
 int pico_pci_setup(struct pci_dev *dev, struct board_data *board)
 {
-#define ERR(COND, LBL, MSG, ...) if(COND) { dev_err(&dev->dev, MSG, ##__VA_ARGS__); goto LBL; }
+#define ERR(COND, LBL, MSG, ...) if(COND) { dev_err(&dev->dev, MSG, ##__VA_ARGS__); if(!ret) ret=-EIO; goto LBL; }
 
     unsigned i;
     int ret;
@@ -390,6 +390,7 @@ int pico_pci_cleanup(struct pci_dev *dev, struct board_data *board)
     pci_release_regions(dev);
 
     pci_disable_device(dev);
+
     return 0;
 }
 
