@@ -201,7 +201,7 @@ ssize_t char_ddr_read(
     if(mutex_lock_interruptible(&board->ddr_lock))
         return -EINTR;
 
-    while(npos<limit) {
+    while(npos<limit && !ret) {
         /* page and offset in device */
         unsigned page = npos/page_size, i,
                  final_page = (limit-1)/page_size;
