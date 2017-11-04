@@ -172,12 +172,6 @@ ssize_t char_ddr_read(
            limit = page_size*DDR_SELECT_COUNT;
     loff_t npos = 0;
 
-    if(page_size%PAGE_SIZE) {
-        /* this is probably implied by BAR size/alignment restrictions */
-        dev_dbg(&board->pci_dev->dev, "Device page size is not a multiple of system page size %zu %lu\n", page_size, PAGE_SIZE);
-        return -EIO;
-    }
-
     if(pos) npos = *pos;
 
     dev_dbg(&board->pci_dev->dev, "DDR read(%lu, %zu) (page_size=%zu)\n", (unsigned long)npos, count, page_size);
@@ -208,6 +202,16 @@ ssize_t char_ddr_read(
 
         uint32_t devoffset = npos%page_size,
                  devlimit = page==final_page ? (limit%page_size) : page_size;
+
+        if(signal_pending(current)) {
+            ret = -ERESTARTSYS;
+            break;
+        }
+        /* relinquish CPU occasionally */
+        schedule();
+
+        dev_dbg(&board->pci_dev->dev,"READ Page %u [%u, %u)\n",
+                page, (unsigned)devoffset, (unsigned)devlimit);
 
         iowrite32(page, board->bar0+DDR_SELECT);
 
