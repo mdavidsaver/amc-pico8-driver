@@ -255,8 +255,8 @@ irqreturn_t amc_isr(int irq, void *dev_id)
                 }
 
                 if(status&(1<<18)) {
-#  ifdef dev_warn_ratelimited
-                    dev_warn_ratelimited(&board->pci_dev->dev, "ISR: Missed Previous Event\n");
+#  ifdef dev_dbg_ratelimited
+                    dev_dbg_ratelimited(&board->pci_dev->dev, "ISR: Missed Previous Event\n");
 #  endif
                 }
 
