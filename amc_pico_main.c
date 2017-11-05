@@ -177,12 +177,14 @@ irqreturn_t amc_isr(int irq, void *dev_id)
          * how to handle, and can't mask out.
          * So clear it and hope for the best...
          */
-        dev_warn(&board->pci_dev->dev, "Device signaling unknown IRQ %08x\n", (unsigned)active);
+        WARN_ONCE(1, "PICO8 unknown IRQ %08x\n", (unsigned)active);
+        dev_dbg(&board->pci_dev->dev, "Device signaling unknown IRQ %08x\n", (unsigned)active);
     }
 
     if(!active) {
         if (unlikely(board->irqmode==dmac_irq_msi)) {
-            dev_warn(&board->pci_dev->dev, "Spurious IRQ in MSI mode %08x\n", (unsigned)active);
+            WARN_ONCE(1, "PICO8 Spurious IRQ in MSI mode %08x\n", (unsigned)active);
+            dev_dbg(&board->pci_dev->dev, "Spurious IRQ in MSI mode %08x\n", (unsigned)active);
         }
         return IRQ_NONE;
     }
@@ -198,18 +200,21 @@ irqreturn_t amc_isr(int irq, void *dev_id)
         dev_dbg(&board->pci_dev->dev, "ISR: irq: 0x%x %u\n", irq, (unsigned)count);
 
         if(unlikely(count==0)) {
-            dev_warn(&board->pci_dev->dev, "DMA DONE w/ response fifo empty\n");
+            WARN_ONCE(1, "PICO8 DMA DONE w/ response fifo empty\n");
+            dev_dbg(&board->pci_dev->dev, "DMA DONE w/ response fifo empty\n");
 
         } else {
 
             while (count > 0) {
                 if (unlikely(count == 0xFFFFFFFFUL)) {
-                    dev_err(&board->pci_dev->dev,
+                    WARN_ONCE(1, "PICO8 something wrong when reading from DMA\n");
+                    dev_dbg(&board->pci_dev->dev,
                             "something wrong when reading from DMA\n");
                     break;
 
                 } else if (unlikely(cycles++>100)) {
-                    dev_err(&board->pci_dev->dev, "FIFO ran away, stopping\n");
+                    WARN_ONCE(1, "PICO8 FIFO ran away, stopping\n");
+                    dev_dbg(&board->pci_dev->dev, "FIFO ran away, stopping\n");
                     op = 2;
                     break;
                 }
