@@ -86,101 +86,22 @@ loff_t char_ddr_llseek(struct file *filp, loff_t pos, int whence)
 }
 
 static
-ssize_t char_ddr_write(struct file *filp, const char __user *buf, size_t count, loff_t *pos)
+ssize_t char_ddr_readwrite(struct board_data *board,
+                           char __user *buf,
+                           size_t count,
+                           loff_t *pos,
+                           int iswrite)
 {
     ssize_t ret=0;
-    struct board_data *board = (struct board_data *)filp->private_data;
-    size_t page_size = resource_size(&board->pci_dev->resource[2]),
-           limit = page_size*DDR_SELECT_COUNT,
-           remaining;
-    loff_t npos = 0;
-
-    if(pos) npos = *pos;
-
-    dev_dbg(&board->pci_dev->dev, "DDR write(%lu, %zu) (page_size=%zu)\n", (unsigned long)npos, count, page_size);
-
-    /* round down to word boundary */
-    count &= ~3;
-    npos  &= ~3;
-
-    if(npos>limit) npos = limit;
-
-    if(count>limit-npos) count = limit-npos;
-
-    if(!count) return count;
-
-    remaining = count;
-
-    if(mutex_lock_interruptible(&board->ddr_lock))
-        return -EINTR;
-
-    while(ret==0 && remaining>0) {
-
-        unsigned page = npos/page_size;
-        uint32_t poffset = npos%page_size,
-                 plimit = poffset + remaining;
-
-        if(plimit > page_size-poffset)
-            plimit = page_size-poffset;
-
-        if(unlikely(page>=DDR_SELECT_COUNT)) {
-            ret = -EINVAL;
-            WARN(1, "Page selection logic error %lu %zu\n", (unsigned long)npos, page_size);
-            break;
-        }
-        if(signal_pending(current)) {
-            ret = -ERESTARTSYS;
-            break;
-        }
-        /* relinquish CPU once per page */
-        schedule();
-
-        remaining -= plimit-poffset;
-        npos      += plimit-poffset;
-
-        /* page select */
-        iowrite32(page, board->bar0+DDR_SELECT);
-
-        for(; !ret && poffset<plimit; poffset+=4, buf+=4) {
-            uint32_t val;
-            ret = get_user(val, (uint32_t*)buf);
-            if(!ret)
-                iowrite32(val, board->bar2+poffset);
-        }
-    }
-
-    mutex_unlock(&board->ddr_lock);
-
-    if(ret) {
-        dev_dbg(&board->pci_dev->dev, "  ERR %zd\n", ret);
-        return ret;
-
-    } else {
-        count -= remaining;
-        if(pos) *pos = npos;
-
-        dev_dbg(&board->pci_dev->dev, "  POS %lu CNT %zd\n", (unsigned long)npos, count);
-        return count;
-    }
-}
-
-static
-ssize_t char_ddr_read(
-        struct file *filp,
-        char __user *buf,
-        size_t count,
-        loff_t *pos
-        )
-{
-    ssize_t ret=0;
-    struct board_data *board = (struct board_data *)filp->private_data;
     size_t page_size = resource_size(&board->pci_dev->resource[2]),
            limit = page_size*DDR_SELECT_COUNT;
     loff_t npos = 0;
 
     if(pos) npos = *pos;
 
-    dev_dbg(&board->pci_dev->dev, "DDR read(%lu, %zu) (page_size=%zu)\n", (unsigned long)npos, count, page_size);
+    dev_dbg(&board->pci_dev->dev, "DDR %s(%lu, %zu) (page_size=%zu)\n",
+            iswrite ? "WRITE" : "READ",
+            (unsigned long)npos, count, page_size);
 
     /* round down to word boundary */
     count &= ~3u;
@@ -216,15 +137,24 @@ ssize_t char_ddr_read(
         /* relinquish CPU once per page */
         schedule();
 
-        dev_dbg(&board->pci_dev->dev,"READ Page %u [%u, %u)\n",
+        dev_dbg(&board->pci_dev->dev,"%s Page %u [%u, %u)\n",
+                iswrite ? "WRITE" : "READ",
                 page, (unsigned)devoffset, (unsigned)devlimit);
 
         iowrite32(page, board->bar0+DDR_SELECT);
 
         for(i=devoffset; i<devlimit && !ret; i+=4, buf+=4) {
-            uint32_t val = ioread32(board->bar2+i);
+            uint32_t val;
 
-            ret = put_user(val, (uint32_t*)buf);
+            if(!iswrite) {
+                val = ioread32(board->bar2+i);
+                ret = put_user(val, (uint32_t*)buf);
+
+            } else {
+                ret = get_user(val, (uint32_t*)buf);
+                if(!ret)
+                    iowrite32(val, board->bar2+i);
+            }
         }
 
         npos  += i-devoffset;
@@ -243,6 +173,30 @@ ssize_t char_ddr_read(
         dev_dbg(&board->pci_dev->dev, "  POS %lu CNT %zd\n", (unsigned long)npos, count);
         return count;
     }
+}
+
+static
+ssize_t char_ddr_write(struct file *filp,
+                       const char __user *buf,
+                       size_t count,
+                       loff_t *pos)
+{
+    struct board_data *board = (struct board_data *)filp->private_data;
+
+    return char_ddr_readwrite(board, (char * __user)buf, count, pos, 1);
+}
+
+static
+ssize_t char_ddr_read(
+        struct file *filp,
+        char __user *buf,
+        size_t count,
+        loff_t *pos
+        )
+{
+    struct board_data *board = (struct board_data *)filp->private_data;
+
+    return char_ddr_readwrite(board, buf, count, pos, 0);
 }
 
 const struct file_operations amc_ddr_fops = {
