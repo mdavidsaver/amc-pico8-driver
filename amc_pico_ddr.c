@@ -120,14 +120,20 @@ ssize_t char_ddr_write(struct file *filp, const char __user *buf, size_t count, 
         uint32_t poffset = npos%page_size,
                  plimit = poffset + remaining;
 
+        if(plimit > page_size-poffset)
+            plimit = page_size-poffset;
+
         if(unlikely(page>=DDR_SELECT_COUNT)) {
             ret = -EINVAL;
             WARN(1, "Page selection logic error %lu %zu\n", (unsigned long)npos, page_size);
             break;
         }
-
-        if(plimit>page_size)
-            plimit = page_size;
+        if(signal_pending(current)) {
+            ret = -ERESTARTSYS;
+            break;
+        }
+        /* relinquish CPU once per page */
+        schedule();
 
         remaining -= plimit-poffset;
         npos      += plimit-poffset;
@@ -201,13 +207,13 @@ ssize_t char_ddr_read(
                  final_page = (limit-1)/page_size;
 
         uint32_t devoffset = npos%page_size,
-                 devlimit = page==final_page ? (limit%page_size) : page_size;
+                 devlimit = page==final_page ? ((limit-1u)%page_size)+1u : page_size;
 
         if(signal_pending(current)) {
             ret = -ERESTARTSYS;
             break;
         }
-        /* relinquish CPU occasionally */
+        /* relinquish CPU once per page */
         schedule();
 
         dev_dbg(&board->pci_dev->dev,"READ Page %u [%u, %u)\n",
@@ -221,8 +227,8 @@ ssize_t char_ddr_read(
             ret = put_user(val, (uint32_t*)buf);
         }
 
-        npos  += devlimit-devoffset;
-        count += devlimit-devoffset;
+        npos  += i-devoffset;
+        count += i-devoffset;
     }
 
     mutex_unlock(&board->ddr_lock);
